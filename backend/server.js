@@ -7,6 +7,9 @@ import Employee from "./models/Employee.js";
 import Leave from "./models/Leave.js";
 import Department from "./models/Department.js";
 import Attendance from "./models/Attendance.js";
+import Candidate from "./models/Candidate.js";
+import Payroll from "./models/Payroll.js";
+import Performance from "./models/Performance.js";
 
 dotenv.config();
 
@@ -20,10 +23,24 @@ app.use(express.json());
 // MongoDB Connection
 const mongoURI = process.env.MONGODB_URI || process.env.MONGO_URI;
 
+if (!mongoURI) {
+  console.error("FATAL: No MongoDB URI found. Set MONGODB_URI in your .env file.");
+  process.exit(1);
+}
+
 mongoose
   .connect(mongoURI)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch((err) => console.error("MongoDB Connection Error:", err));
+  .then(() => {
+    console.log("MongoDB Connected Successfully");
+    // Only start the server after DB is ready
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("MongoDB Connection Error:", err.message);
+    process.exit(1);
+  });
 
 // ================= EMPLOYEE ROUTES =================
 
@@ -48,11 +65,15 @@ app.post("/api/employees", async (req, res) => {
   }
 });
 
-// DELETE employee
-app.delete("/api/employees/:id", async (req, res) => {
+// DELETE employee (cascade: removes related attendance & leave records)
+app.delete('/api/employees/:id', async (req, res) => {
   try {
+    const emp = await Employee.findById(req.params.id);
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+    await Attendance.deleteMany({ employeeId: emp._id });
+    await Leave.deleteMany({ name: emp.name });
     await Employee.findByIdAndDelete(req.params.id);
-    res.json({ message: "Employee deleted successfully" });
+    res.json({ message: 'Employee and related records deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -119,6 +140,21 @@ app.post("/api/departments", async (req, res) => {
   }
 });
 
+// PATCH update department
+app.patch("/api/departments/:id", async (req, res) => {
+  try {
+    const updated = await Department.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ error: "Department not found" });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ================= ATTENDANCE ROUTES =================
 
 // GET all attendance records
@@ -142,7 +178,116 @@ app.post("/api/attendance", async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// PATCH update attendance status
+app.patch("/api/attendance/:id", async (req, res) => {
+  try {
+    const { status, checkIn } = req.body;
+    const updated = await Attendance.findByIdAndUpdate(
+      req.params.id,
+      { ...(status && { status }), ...(checkIn && { checkIn }) },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ error: "Record not found" });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ================= CANDIDATE ROUTES =================
+
+app.get('/api/candidates', async (req, res) => {
+  try {
+    const candidates = await Candidate.find().sort({ createdAt: -1 });
+    res.json(candidates);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/candidates', async (req, res) => {
+  try {
+    const candidate = new Candidate(req.body);
+    const saved = await candidate.save();
+    res.status(201).json(saved);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.patch('/api/candidates/:id', async (req, res) => {
+  try {
+    const updated = await Candidate.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Candidate not found' });
+    res.json(updated);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/candidates/:id', async (req, res) => {
+  try {
+    await Candidate.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Candidate deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ================= PAYROLL ROUTES =================
+
+app.get('/api/payroll', async (req, res) => {
+  try {
+    const records = await Payroll.find().sort({ createdAt: -1 });
+    res.json(records);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/payroll', async (req, res) => {
+  try {
+    const data = req.body;
+    data.netPay = (Number(data.basicSalary) || 0) + (Number(data.allowances) || 0) - (Number(data.deductions) || 0);
+    const record = new Payroll(data);
+    const saved = await record.save();
+    res.status(201).json(saved);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.patch('/api/payroll/:id', async (req, res) => {
+  try {
+    const updated = await Payroll.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Payroll record not found' });
+    res.json(updated);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/payroll/:id', async (req, res) => {
+  try {
+    await Payroll.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Payroll record deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ================= PERFORMANCE ROUTES =================
+
+app.get('/api/performance', async (req, res) => {
+  try {
+    const records = await Performance.find().sort({ createdAt: -1 });
+    res.json(records);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/performance', async (req, res) => {
+  try {
+    const record = new Performance(req.body);
+    const saved = await record.save();
+    res.status(201).json(saved);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.patch('/api/performance/:id', async (req, res) => {
+  try {
+    const updated = await Performance.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Performance record not found' });
+    res.json(updated);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/performance/:id', async (req, res) => {
+  try {
+    await Performance.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Performance record deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
