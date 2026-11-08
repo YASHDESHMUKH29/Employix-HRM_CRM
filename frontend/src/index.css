@@ -1,0 +1,24 @@
+/* Reset the Vite starter styles so the HRM app layout is unaffected */
+:root {
+  font-family: Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #f5f7fb;
+}
+
+/* Let the HRM app fill the full viewport without a fixed-width centred column */
+#root {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  text-align: left;
+  border: none;
+  min-height: 100vh;
+  display: block;
+  box-sizing: border-box;
+}
