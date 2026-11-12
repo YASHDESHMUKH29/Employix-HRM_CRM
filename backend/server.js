@@ -302,6 +302,21 @@ app.patch("/api/candidates/:id", recruiters, async (req, res) => {
   try {
     const updated = await Candidate.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!updated) return res.status(404).json({ error: "Candidate not found" });
+
+    // Auto-promote to Employee when status becomes 'Hired'
+    if (updated.status === "Hired" && updated.email) {
+      const existing = await Employee.findOne({ email: updated.email });
+      if (!existing) {
+        await Employee.create({
+          name:        updated.name,
+          email:       updated.email,
+          department:  updated.department || "General",
+          designation: updated.position   || "New Hire",
+          phone:       updated.phone      || "",
+        });
+      }
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });

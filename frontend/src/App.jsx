@@ -326,6 +326,11 @@ function AppShell({ role, canEdit, canRecruit, isDeptMgr, isEmployee, authFetch,
       });
       if (!res.ok) throw new Error((await res.json()).error);
       setCandidates(await safeFetchArray('/api/candidates'));
+      // When a candidate is hired the backend auto-creates an Employee record,
+      // so re-fetch employees immediately to keep the Employees tab in sync.
+      if (newStatus === 'Hired') {
+        setEmployees(await safeFetchArray('/api/employees'));
+      }
       showToast(`${name} status updated to ${newStatus}.`);
     } catch (err) { showToast('Failed to update candidate.', 'error'); }
   };
